@@ -38,6 +38,7 @@ export async function saveActiveSaveToCache(parsedData, meta = {}) {
       const record = {
         id: 'current',
         timestamp: Date.now(),
+        slotId: meta.slotId || null,
         fileName: meta.fileName || 'Career_Save',
         fileSize: meta.fileSize || 0,
         clubName: parsedData?.managedClub?.name || '',

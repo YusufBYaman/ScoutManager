@@ -11,7 +11,8 @@ import {
   Calendar,
   HardDrive,
   User,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react';
 import { getSavedSlots, deleteSlot } from '../services/cacheService';
 
@@ -21,7 +22,9 @@ export default function UploadZone({ onStartParsing, onLoadFromSlot, isLoading }
   const [isDragOver, setIsDragOver] = useState(false);
   const [slots, setSlots] = useState([]);
   const [isLoadingSlots, setIsLoadingSlots] = useState(true);
+  const [slotToTarget, setSlotToTarget] = useState(null);
   const inputRef = useRef(null);
+  const slotUpdateInputRef = useRef(null);
 
   // Load existing slots from IndexedDB
   const refreshSlots = async () => {
@@ -73,6 +76,21 @@ export default function UploadZone({ onStartParsing, onLoadFromSlot, isLoading }
   const handleStart = () => {
     if (selectedFile) {
       onStartParsing(selectedFile);
+    }
+  };
+
+  const handleSlotFileSelected = (e) => {
+    if (e.target.files && e.target.files[0] && slotToTarget) {
+      onStartParsing(e.target.files[0], slotToTarget);
+    }
+  };
+
+  const triggerSlotUpdate = (slotId, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    setSlotToTarget(slotId);
+    if (slotUpdateInputRef.current) {
+      slotUpdateInputRef.current.value = '';
+      slotUpdateInputRef.current.click();
     }
   };
 
@@ -233,13 +251,13 @@ export default function UploadZone({ onStartParsing, onLoadFromSlot, isLoading }
                     <div
                       key={slot.slotId}
                       className="save-slot-card empty-slot"
-                      onClick={() => inputRef.current?.click()}
+                      onClick={(e) => triggerSlotUpdate(slot.slotId, e)}
                     >
                       <div className="slot-badge">Slot {slot.slotId}</div>
                       <div className="empty-slot-content">
                         <Plus size={18} className="text-gray-500 mb-1" />
                         <span className="empty-title">Boş Slot {slot.slotId}</span>
-                        <span className="empty-desc">Yeni save dosyası yükleyerek bu slota kaydedebilirsiniz</span>
+                        <span className="empty-desc">Tıklayarak yeni save dosyası yükleyin ve bu slota kaydedin</span>
                       </div>
                     </div>
                   );
@@ -259,7 +277,7 @@ export default function UploadZone({ onStartParsing, onLoadFromSlot, isLoading }
                   <div
                     key={slot.slotId}
                     className="save-slot-card active-slot"
-                    onClick={() => onLoadFromSlot && onLoadFromSlot(slot.data)}
+                    onClick={() => onLoadFromSlot && onLoadFromSlot(slot.data, slot.slotId)}
                   >
                     <div className="slot-badge-filled">Slot {slot.slotId}</div>
                     <div className="slot-main-content">
@@ -282,12 +300,21 @@ export default function UploadZone({ onStartParsing, onLoadFromSlot, isLoading }
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          if (onLoadFromSlot) onLoadFromSlot(slot.data);
+                          if (onLoadFromSlot) onLoadFromSlot(slot.data, slot.slotId);
                         }}
                         className="slot-load-btn"
                         title="Bu Kariyeri Aç"
                       >
                         <Play size={13} fill="currentColor" /> Aç
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => triggerSlotUpdate(slot.slotId, e)}
+                        className="slot-update-btn"
+                        title="Save'i Güncelle (Yeni Sezon / Güncel Save Dosyasını Bu Slota Yükle)"
+                      >
+                        <RefreshCw size={13} /> Güncelle
                       </button>
 
                       <button
@@ -306,6 +333,14 @@ export default function UploadZone({ onStartParsing, onLoadFromSlot, isLoading }
           </div>
         </div>
       </div>
+
+      {/* Hidden file input for updating specific slots */}
+      <input
+        ref={slotUpdateInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={handleSlotFileSelected}
+      />
 
       {/* Feature cards below */}
       <div className="feature-cards-grid mt-8">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import Tabs from './components/Tabs';
 import UploadZone from './components/UploadZone';
@@ -12,11 +12,13 @@ import {
   getActiveSaveFromCache,
   saveActiveSaveToCache,
   clearActiveSaveCache,
+  saveToSlot,
   autoSaveToNextAvailableSlot
 } from './services/cacheService';
 
 export default function App() {
   const [parsedData, setParsedData] = useState(null);
+  const [activeSlotId, setActiveSlotId] = useState(null);
   const [isParsing, setIsParsing] = useState(false);
   const [parseStage, setParseStage] = useState('');
   const [parseProgress, setParseProgress] = useState(0);
@@ -25,6 +27,7 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState('squad');
   const [modalPlayer, setModalPlayer] = useState(null);
+  const headerUpdateInputRef = useRef(null);
 
   // Restore cached save on mount
   useEffect(() => {
@@ -33,6 +36,7 @@ export default function App() {
         const cached = await getActiveSaveFromCache();
         if (cached && cached.data) {
           setParsedData(cached.data);
+          if (cached.slotId) setActiveSlotId(cached.slotId);
           setActiveTab('squad');
         }
       } catch (err) {
@@ -42,7 +46,7 @@ export default function App() {
     restoreCache();
   }, []);
 
-  const handleStartParsing = async (file) => {
+  const handleStartParsing = async (file, targetSlotId = null) => {
     setIsParsing(true);
     setParseError(null);
     setParseProgress(5);
@@ -66,7 +70,7 @@ export default function App() {
       // 3. Start Web Worker
       const worker = new Worker(new URL('./parser/parser.worker.js', import.meta.url), { type: 'module' });
 
-      worker.onmessage = (e) => {
+      worker.onmessage = async (e) => {
         const msg = e.data;
         if (msg.stage === 'error') {
           setIsParsing(false);
@@ -75,9 +79,26 @@ export default function App() {
         } else if (msg.stage === 'done') {
           setParseProgress(100);
           setParseMessage('Tamamlandı!');
-          // Persist to IndexedDB cache and next available slot
-          saveActiveSaveToCache(msg.data, { fileName: file.name, fileSize: file.size });
-          autoSaveToNextAvailableSlot(msg.data, { fileName: file.name, fileSize: file.size });
+
+          let finalSlotId = targetSlotId || activeSlotId;
+          if (finalSlotId) {
+            await saveToSlot(finalSlotId, msg.data, { fileName: file.name, fileSize: file.size });
+            setActiveSlotId(finalSlotId);
+          } else {
+            const saved = await autoSaveToNextAvailableSlot(msg.data, { fileName: file.name, fileSize: file.size });
+            if (saved) {
+              finalSlotId = saved.slotId;
+              setActiveSlotId(saved.slotId);
+            }
+          }
+
+          // Persist to active cache
+          await saveActiveSaveToCache(msg.data, {
+            fileName: file.name,
+            fileSize: file.size,
+            slotId: finalSlotId
+          });
+
           setTimeout(() => {
             setParsedData(msg.data);
             setIsParsing(false);
@@ -118,6 +139,7 @@ export default function App() {
       // ignore
     }
     setParsedData(null);
+    setActiveSlotId(null);
     setIsParsing(false);
     setParseError(null);
     setModalPlayer(null);
@@ -131,6 +153,19 @@ export default function App() {
         players={parsedData?.players}
         onSelectPlayer={setModalPlayer}
         onResetFile={handleResetFile}
+        onUpdateCurrentSave={() => headerUpdateInputRef.current?.click()}
+      />
+
+      {/* Hidden file input for updating active save from Header */}
+      <input
+        ref={headerUpdateInputRef}
+        type="file"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          if (e.target.files && e.target.files[0]) {
+            handleStartParsing(e.target.files[0], activeSlotId);
+          }
+        }}
       />
 
       {/* Main Content Area */}
@@ -144,9 +179,10 @@ export default function App() {
         ) : !parsedData ? (
           <UploadZone
             onStartParsing={handleStartParsing}
-            onLoadFromSlot={(slotData) => {
+            onLoadFromSlot={(slotData, slotId) => {
               setParsedData(slotData);
-              saveActiveSaveToCache(slotData);
+              setActiveSlotId(slotId);
+              saveActiveSaveToCache(slotData, { slotId });
               setActiveTab('squad');
             }}
             isLoading={isParsing}

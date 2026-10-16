@@ -1,8 +1,8 @@
 import React from 'react';
 import QuickSearch from './QuickSearch';
-import { Shield, Upload, Sparkles } from 'lucide-react';
+import { Shield, Upload, Sparkles, RefreshCw } from 'lucide-react';
 
-export default function Header({ club, players, onSelectPlayer, onResetFile }) {
+export default function Header({ club, players, onSelectPlayer, onResetFile, onUpdateCurrentSave }) {
   return (
     <header className="app-header">
       <div className="header-left">
@@ -26,6 +26,18 @@ export default function Header({ club, players, onSelectPlayer, onResetFile }) {
       <div className="header-right">
         {players && players.length > 0 && (
           <QuickSearch players={players} onSelectPlayer={onSelectPlayer} />
+        )}
+
+        {club && onUpdateCurrentSave && (
+          <button
+            type="button"
+            onClick={onUpdateCurrentSave}
+            className="header-update-btn"
+            title="Kariyer Save Dosyanızı Güncelleyin (Yeni Sezon / Yeni Transferler)"
+          >
+            <RefreshCw size={14} />
+            <span>Save'i Güncelle</span>
+          </button>
         )}
 
         <button
